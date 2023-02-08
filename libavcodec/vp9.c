@@ -1371,7 +1371,7 @@ static int decode_tiles(AVCodecContext *avctx,
             }
 
             // loopfilter one row
-            if (s->s.h.filter.level) {
+            if (s->s.h.filter.level && !avctx->skip_loop_filter) {
                 yoff2 = yoff;
                 uvoff2 = uvoff;
                 lflvl_ptr = s->lflvl;
@@ -1486,7 +1486,7 @@ int loopfilter_proc(AVCodecContext *avctx)
     for (i = 0; i < s->sb_rows; i++) {
         vp9_await_tile_progress(s, i, s->s.h.tiling.tile_cols);
 
-        if (s->s.h.filter.level) {
+        if (s->s.h.filter.level && !avctx->skip_loop_filter) {
             yoff = (ls_y * 64)*i;
             uvoff =  (ls_uv * 64 >> s->ss_v)*i;
             lflvl_ptr = s->lflvl+s->sb_cols*i;
