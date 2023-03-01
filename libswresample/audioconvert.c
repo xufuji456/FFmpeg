@@ -242,7 +242,7 @@ int swri_audio_convert(AudioConvert *ctx, AudioData *out, AudioData *in, int len
         const int is= ich < 0 ? 0 : (in->planar ? 1 : in->ch_count) * in->bps;
         const uint8_t *pi= ich < 0 ? ctx->silence : in->ch[ich];
         uint8_t *end, *po = out->ch[ch];
-        if(!po)
+        if(!po || !pi)
             continue;
         end = po + os * len;
         ctx->conv_f(po+off*os, pi+off*is, is, os, end);
