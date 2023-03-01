@@ -25,6 +25,7 @@
  */
 
 #include "libavutil/aarch64/asm.S"
+#include "neon.S"
 
 const trans, align=4
         .short          64, 83, 64, 36
