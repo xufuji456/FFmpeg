@@ -63,7 +63,6 @@ void ff_hevc_idct_4x4_dc_10_neon(int16_t *coeffs);
 void ff_hevc_idct_8x8_dc_10_neon(int16_t *coeffs);
 void ff_hevc_idct_16x16_dc_10_neon(int16_t *coeffs);
 void ff_hevc_idct_32x32_dc_10_neon(int16_t *coeffs);
-void ff_hevc_transform_luma_4x4_neon_8(int16_t *coeffs);
 void ff_hevc_sao_band_filter_8x8_8_neon(uint8_t *_dst, const uint8_t *_src,
                                   ptrdiff_t stride_dst, ptrdiff_t stride_src,
                                   const int16_t *sao_offset_val, int sao_left_class,
