@@ -482,3 +482,73 @@ endfunc
 put_hevc qpel
 put_hevc qpel_uni
 put_hevc qpel_bi
+
+.macro init_put_pixels
+        prfm   pldl1keep, [x1]
+        prfm   pldl1keep, [x1, x2]
+        mov    x12, #MAX_PB_SIZE
+        lsl    x12, x12, #1
+.endm
+
+function ff_hevc_put_pixels_w8_neon_8, export=1
+        init_put_pixels
+0:      subs       x3, x3, #2
+        ld1        {v0.8b}, [x1], x2
+        ld1        {v1.8b}, [x1], x2
+        ushll      v2.8h, v0.8b, #6
+        ushll      v3.8h, v1.8b, #6
+        st1        {v2.8h}, [x0], x12
+        st1        {v3.8h}, [x0], x12
+        b.ne       0b
+        ret
+endfunc
+
+function ff_hevc_put_pixels_w16_neon_8, export=1
+        init_put_pixels
+0:      subs       x3, x3, #2
+        ld1        {v0.8b-v1.8b}, [x1], x2
+        ld1        {v2.8b-v3.8b}, [x1], x2
+        ushll      v4.8h, v0.8b, #6
+        ushll      v5.8h, v1.8b, #6
+        ushll      v6.8h, v2.8b, #6
+        ushll      v7.8h, v3.8b, #6
+        st1        {v4.8h-v5.8h}, [x0], x12
+        st1        {v6.8h-v7.8h}, [x0], x12
+        b.ne       0b
+        ret
+endfunc
+
+function ff_hevc_put_pixels_w32_neon_8, export=1
+        init_put_pixels
+0:      subs       x3, x3, #1
+        ld1        {v0.8b-v3.8b}, [x1], x2
+        ushll      v4.8h, v0.8b, #6
+        ushll      v5.8h, v1.8b, #6
+        ushll      v6.8h, v2.8b, #6
+        ushll      v7.8h, v3.8b, #6
+        st1        {v4.8h-v7.8h}, [x0], x12
+        b.ne       0b
+        ret
+endfunc
+
+.macro put_pel_uni_pixels width, regs1, regs2, regs3, regs4
+        function ff_hevc_put_pel_uni_pixels_w\width\()_neon_8, export=1
+        mov        x12, x4 // height
+1:      subs       x12, x12, #4
+        ld1        {\regs1}, [x2], x3
+        ld1        {\regs2}, [x2], x3
+        ld1        {\regs3}, [x2], x3
+        ld1        {\regs4}, [x2], x3
+        st1        {\regs1}, [x0], x1
+        st1        {\regs2}, [x0], x1
+        st1        {\regs3}, [x0], x1
+        st1        {\regs4}, [x0], x1
+        b.ne       1b
+        ret
+endfunc
+.endm
+
+put_pel_uni_pixels    4, v0.4h,    v0.4h,    v1.4h,    v1.4h
+put_pel_uni_pixels    8, v0.4s,    v1.4s,    v2.4s,    v3.4s
+put_pel_uni_pixels   16, v0.4s,    v1.4s,    v2.4s,    v3.4s
+put_pel_uni_pixels   32, v0.4s-v1.4s, v2.4s-v3.4s, v16.4s-v17.4s, v18.4s-v19.4s
