@@ -22,9 +22,13 @@
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
+#include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
-#include "rawdec.h"
+
+typedef struct WavArcContext {
+    int64_t data_end;
+} WavArcContext;
 
 static int wavarc_probe(const AVProbeData *p)
 {
@@ -51,6 +55,7 @@ static int wavarc_probe(const AVProbeData *p)
 
 static int wavarc_read_header(AVFormatContext *s)
 {
+    WavArcContext *w = s->priv_data;
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
     int filename_len, fmt_len, ret;
@@ -80,7 +85,9 @@ static int wavarc_read_header(AVFormatContext *s)
     if (ret < 0)
         return ret;
     memcpy(par->extradata, data, sizeof(data));
-    avio_read(pb, par->extradata + sizeof(data), fmt_len);
+    ret = ffio_read_size(pb, par->extradata + sizeof(data), fmt_len);
+    if (ret < 0)
+        return ret;
 
     par->codec_type = AVMEDIA_TYPE_AUDIO;
     par->codec_id   = AV_CODEC_ID_WAVARC;
@@ -91,7 +98,8 @@ static int wavarc_read_header(AVFormatContext *s)
         if (id != MKTAG('d','a','t','a'))
             avio_skip(pb, avio_rl32(pb));
     } while (id != MKTAG('d','a','t','a') && !avio_feof(pb));
-    avio_skip(pb, 4);
+    w->data_end = avio_rl32(pb);
+    w->data_end += avio_tell(pb);
 
     if (AV_RL32(par->extradata + 16) != MKTAG('R','I','F','F'))
         return AVERROR_INVALIDDATA;
@@ -108,15 +116,30 @@ static int wavarc_read_header(AVFormatContext *s)
     return 0;
 }
 
+static int wavarc_read_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    WavArcContext *w = s->priv_data;
+    AVIOContext *pb = s->pb;
+    int64_t size, left = w->data_end - avio_tell(pb);
+    int ret;
+
+    size = FFMIN(left, 1024);
+    if (size <= 0)
+        return AVERROR_EOF;
+
+    ret = av_get_packet(pb, pkt, size);
+    pkt->stream_index = 0;
+    return ret;
+}
+
 const AVInputFormat ff_wavarc_demuxer = {
     .name           = "wavarc",
     .long_name      = NULL_IF_CONFIG_SMALL("Waveform Archiver"),
+    .priv_data_size = sizeof(WavArcContext),
     .read_probe     = wavarc_probe,
-    .read_packet    = ff_raw_read_partial_packet,
+    .read_packet    = wavarc_read_packet,
     .flags          = AVFMT_NOBINSEARCH | AVFMT_NOGENSEARCH | AVFMT_NO_BYTE_SEEK | AVFMT_NOTIMESTAMPS,
     .read_header    = wavarc_read_header,
     .extensions     = "wa",
     .raw_codec_id   = AV_CODEC_ID_WAVARC,
-    .priv_data_size = sizeof(FFRawDemuxerContext),
-    .priv_class     = &ff_raw_demuxer_class,
 };
