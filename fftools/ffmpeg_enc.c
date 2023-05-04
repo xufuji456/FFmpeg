@@ -59,6 +59,9 @@ struct Encoder {
 
     // combined size of all the packets received from the encoder
     uint64_t data_size;
+
+    // number of packets received from the encoder
+    uint64_t packets_encoded;
 };
 
 static uint64_t dup_warning = 1000;
@@ -581,23 +584,30 @@ void enc_stats_write(OutputStream *ost, EncStats *es,
     avio_flush(io);
 }
 
+static inline double psnr(double d)
+{
+    return -10.0 * log10(d);
+}
+
 static void update_video_stats(OutputStream *ost, const AVPacket *pkt, int write_vstats)
 {
     Encoder        *e = ost->enc;
     const uint8_t *sd = av_packet_get_side_data(pkt, AV_PKT_DATA_QUALITY_STATS,
                                                 NULL);
     AVCodecContext *enc = ost->enc_ctx;
+    enum AVPictureType pict_type;
     int64_t frame_number;
     double ti1, bitrate, avg_bitrate;
+    double psnr_val = -1;
 
     ost->quality   = sd ? AV_RL32(sd) : -1;
-    ost->pict_type = sd ? sd[4] : AV_PICTURE_TYPE_NONE;
+    pict_type      = sd ? sd[4] : AV_PICTURE_TYPE_NONE;
 
-    for (int i = 0; i<FF_ARRAY_ELEMS(ost->error); i++) {
-        if (sd && i < sd[5])
-            ost->error[i] = AV_RL64(sd + 8 + 8*i);
-        else
-            ost->error[i] = -1;
+    if ((enc->flags & AV_CODEC_FLAG_PSNR) && sd && sd[5]) {
+        // FIXME the scaling assumes 8bit
+        double error = AV_RL64(sd + 8) / (enc->width * enc->height * 255.0 * 255.0);
+        if (error >= 0 && error <= 1)
+            psnr_val = psnr(error);
     }
 
     if (!write_vstats)
@@ -612,7 +622,7 @@ static void update_video_stats(OutputStream *ost, const AVPacket *pkt, int write
         }
     }
 
-    frame_number = ost->packets_encoded;
+    frame_number = e->packets_encoded;
     if (vstats_version <= 1) {
         fprintf(vstats_file, "frame= %5"PRId64" q= %2.1f ", frame_number,
                 ost->quality / (float)FF_QP2LAMBDA);
@@ -621,8 +631,8 @@ static void update_video_stats(OutputStream *ost, const AVPacket *pkt, int write
                 ost->quality / (float)FF_QP2LAMBDA);
     }
 
-    if (ost->error[0]>=0 && (enc->flags & AV_CODEC_FLAG_PSNR))
-        fprintf(vstats_file, "PSNR= %6.2f ", psnr(ost->error[0] / (enc->width * enc->height * 255.0 * 255.0)));
+    if (psnr_val >= 0)
+        fprintf(vstats_file, "PSNR= %6.2f ", psnr_val);
 
     fprintf(vstats_file,"f_size= %6d ", pkt->size);
     /* compute pts value */
@@ -634,7 +644,7 @@ static void update_video_stats(OutputStream *ost, const AVPacket *pkt, int write
     avg_bitrate = (double)(e->data_size * 8) / ti1 / 1000.0;
     fprintf(vstats_file, "s_size= %8.0fkB time= %0.3f br= %7.1fkbits/s avg_br= %7.1fkbits/s ",
            (double)e->data_size / 1024, ti1, bitrate, avg_bitrate);
-    fprintf(vstats_file, "type= %c\n", av_get_picture_type_char(ost->pict_type));
+    fprintf(vstats_file, "type= %c\n", av_get_picture_type_char(pict_type));
 }
 
 static int encode_frame(OutputFile *of, OutputStream *ost, AVFrame *frame)
@@ -701,7 +711,7 @@ static int encode_frame(OutputFile *of, OutputStream *ost, AVFrame *frame)
             update_video_stats(ost, pkt, !!vstats_filename);
         if (ost->enc_stats_post.io)
             enc_stats_write(ost, &ost->enc_stats_post, NULL, pkt,
-                            ost->packets_encoded);
+                            e->packets_encoded);
 
         if (debug_ts) {
             av_log(ost, AV_LOG_INFO, "encoder -> type:%s "
@@ -735,7 +745,7 @@ static int encode_frame(OutputFile *of, OutputStream *ost, AVFrame *frame)
 
         e->data_size += pkt->size;
 
-        ost->packets_encoded++;
+        e->packets_encoded++;
 
         of_output_packet(of, pkt, ost, 0);
     }
