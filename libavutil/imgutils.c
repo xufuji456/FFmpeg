@@ -525,10 +525,17 @@ int av_image_copy_to_buffer(uint8_t *dst, int dst_size,
         const uint8_t *src = src_data[i];
         h = (height + (1 << shift) - 1) >> shift;
 
-        for (j = 0; j < h; j++) {
-            memcpy(dst, src, linesize[i]);
-            dst += FFALIGN(linesize[i], align);
-            src += src_linesize[i];
+        if (FFALIGN(linesize[i], align) == linesize[i] && src_linesize[i] == linesize[i]) {
+            int size = linesize[i] * h;
+            memcpy(dst, src, size);
+            dst += size;
+            src += size;
+        } else {
+            for (j = 0; j < h; j++) {
+                memcpy(dst, src, linesize[i]);
+                dst += FFALIGN(linesize[i], align);
+                src += src_linesize[i];
+            }
         }
     }
 
