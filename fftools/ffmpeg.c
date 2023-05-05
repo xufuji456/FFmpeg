@@ -1098,7 +1098,7 @@ static int decode_video(InputStream *ist, const AVPacket *pkt, int *got_output,
         return ret;
 
     if(ist->top_field_first>=0)
-        decoded_frame->top_field_first = ist->top_field_first;
+        decoded_frame->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
 
     ist->frames_decoded++;
 
@@ -1143,7 +1143,7 @@ static int decode_video(InputStream *ist, const AVPacket *pkt, int *got_output,
                av_ts2timestr(best_effort_timestamp, &ist->st->time_base),
                av_ts2str(decoded_frame->duration),
                av_ts2timestr(decoded_frame->duration, &ist->st->time_base),
-               decoded_frame->key_frame, decoded_frame->pict_type,
+               !!(decoded_frame->flags & AV_FRAME_FLAG_KEY), decoded_frame->pict_type,
                ist->st->time_base.num, ist->st->time_base.den);
     }
 

@@ -257,13 +257,16 @@ int enc_open(OutputStream *ost, AVFrame *frame)
         if (frame) {
             if (enc_ctx->flags & (AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME) &&
                 ost->top_field_first >= 0)
-                frame->top_field_first = !!ost->top_field_first;
-
-            if (frame->interlaced_frame) {
-                if (enc->id == AV_CODEC_ID_MJPEG)
-                    enc_ctx->field_order = frame->top_field_first ? AV_FIELD_TT:AV_FIELD_BB;
+                if (ost->top_field_first)
+                    frame->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
                 else
-                    enc_ctx->field_order = frame->top_field_first ? AV_FIELD_TB:AV_FIELD_BT;
+                    frame->flags &= ~AV_FRAME_FLAG_TOP_FIELD_FIRST;
+
+            if (frame->flags & AV_FRAME_FLAG_INTERLACED) {
+                if (enc->id == AV_CODEC_ID_MJPEG)
+                    enc_ctx->field_order = (frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) ? AV_FIELD_TT:AV_FIELD_BB;
+                else
+                    enc_ctx->field_order = (frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) ? AV_FIELD_TB:AV_FIELD_BT;
             } else
                 enc_ctx->field_order = AV_FIELD_PROGRESSIVE;
         }
@@ -1002,11 +1005,11 @@ static enum AVPictureType forced_kf_apply(void *logctx, KeyframeForceCtx *kf,
             goto force_keyframe;
         }
     } else if (kf->type == KF_FORCE_SOURCE &&
-               in_picture->key_frame == 1 && !dup_idx) {
+               (in_picture->flags & AV_FRAME_FLAG_KEY) && !dup_idx) {
             goto force_keyframe;
     } else if (kf->type == KF_FORCE_SOURCE_NO_DROP && !dup_idx) {
         kf->dropped_keyframe = 0;
-        if ((in_picture->key_frame == 1) || kf->dropped_keyframe)
+        if ((in_picture->flags & AV_FRAME_FLAG_KEY) || kf->dropped_keyframe)
             goto force_keyframe;
     }
 
@@ -1061,7 +1064,7 @@ static void do_video_out(OutputFile *of, OutputStream *ost, AVFrame *frame)
         }
     }
     ost->last_dropped = nb_frames == nb_frames_prev && frame;
-    ost->kf.dropped_keyframe = ost->last_dropped && frame && frame->key_frame;
+    ost->kf.dropped_keyframe = ost->last_dropped && frame && (frame->flags & AV_FRAME_FLAG_KEY);
 
     /* duplicates frame if needed */
     for (i = 0; i < nb_frames; i++) {
