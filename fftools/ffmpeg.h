@@ -95,6 +95,12 @@ typedef struct {
 } AudioChannelMap;
 #endif
 
+typedef struct DemuxPktData {
+    // estimated dts in AV_TIME_BASE_Q,
+    // to be used when real dts is missing
+    int64_t dts_est;
+} DemuxPktData;
+
 typedef struct OptionsContext {
     OptionGroup *g;
 
@@ -126,6 +132,7 @@ typedef struct OptionsContext {
     int loop;
     int rate_emu;
     float readrate;
+    double readrate_initial_burst;
     int accurate_seek;
     int thread_queue_size;
     int input_sync_ref;
@@ -285,11 +292,6 @@ typedef struct InputFilter {
 
     int sample_rate;
     AVChannelLayout ch_layout;
-
-    AVBufferRef *hw_frames_ctx;
-    int32_t *displaymatrix;
-
-    int eof;
 } InputFilter;
 
 typedef struct OutputFilter {
@@ -354,17 +356,11 @@ typedef struct InputStream {
     AVCodecParameters *par;
     AVCodecContext *dec_ctx;
     const AVCodec *dec;
+    const AVCodecDescriptor *codec_desc;
     AVFrame *decoded_frame;
     AVPacket *pkt;
 
     AVRational framerate_guessed;
-
-    int64_t       start;     /* time when read started */
-    /* predicted dts of the next packet read for this stream or (when there are
-     * several frames in a packet) of the next frame in current packet (in AV_TIME_BASE units) */
-    int64_t       next_dts;
-    int64_t first_dts;       ///< dts of the first packet read for this stream (in AV_TIME_BASE units)
-    int64_t       dts;       ///< dts of the last packet read for this stream (in AV_TIME_BASE units)
 
     // pts/estimated duration of the last decoded frame
     // * in decoder timebase for video,
@@ -374,14 +370,6 @@ typedef struct InputStream {
     AVRational    last_frame_tb;
     int           last_frame_sample_rate;
 
-    int           wrap_correction_done;
-
-    // the value of AVCodecParserContext.repeat_pict from the AVStream parser
-    // for the last packet returned from ifile_get_packet()
-    // -1 if unknown
-    // FIXME: this is a hack, the avstream parser should not be used
-    int last_pkt_repeat_pict;
-
     int64_t filter_in_rescale_delta_last;
 
     // when forcing constant input framerate through -r,
@@ -390,7 +378,6 @@ typedef struct InputStream {
 
     int64_t nb_samples; /* number of samples in the last decoded audio frame before looping */
 
-    int saw_first_ts;
     AVDictionary *decoder_opts;
     AVRational framerate;               /* framerate forced with -r */
     int top_field_first;
@@ -438,10 +425,6 @@ typedef struct InputStream {
     enum AVPixelFormat hwaccel_pix_fmt;
 
     /* stats */
-    // combined size of all the packets read
-    uint64_t data_size;
-    /* number of packets successfully read for this stream */
-    uint64_t nb_packets;
     // number of frames/samples retrieved from the decoder
     uint64_t frames_decoded;
     uint64_t samples_decoded;
@@ -459,6 +442,9 @@ typedef struct InputFile {
 
     int index;
 
+    // input format has no timestamps
+    int format_nots;
+
     AVFormatContext *ctx;
     int eof_reached;      /* true if eof reached */
     int eagain;           /* true if last read attempt returned EAGAIN */
@@ -469,11 +455,6 @@ typedef struct InputFile {
      */
     int64_t start_time_effective;
     int64_t ts_offset;
-    /**
-     * Extra timestamp offset added by discontinuity handling.
-     */
-    int64_t ts_offset_discont;
-    int64_t last_ts;
     int64_t start_time;   /* user-specified start time in AV_TIME_BASE or AV_NOPTS_VALUE */
     int64_t recording_time;
 
@@ -483,7 +464,6 @@ typedef struct InputFile {
     InputStream **streams;
     int        nb_streams;
 
-    int rate_emu;
     float readrate;
     int accurate_seek;
 
@@ -788,7 +768,13 @@ void sub2video_update(InputStream *ist, int64_t heartbeat_pts, AVSubtitle *sub);
 int ifilter_send_frame(InputFilter *ifilter, AVFrame *frame, int keep_reference);
 int ifilter_send_eof(InputFilter *ifilter, int64_t pts, AVRational tb);
 
-int ifilter_parameters_from_codecpar(InputFilter *ifilter, AVCodecParameters *par);
+/**
+ * Set up fallback filtering parameters from a decoder context. They will only
+ * be used if no frames are ever sent on this input, otherwise the actual
+ * parameters are taken from the frame.
+ */
+int ifilter_parameters_from_dec(InputFilter *ifilter, const AVCodecContext *dec);
+
 int ifilter_has_all_input_formats(FilterGraph *fg);
 
 /**
