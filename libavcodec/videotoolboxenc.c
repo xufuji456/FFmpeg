@@ -1441,6 +1441,17 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
         }
     }
 
+    // low-latency mode: eliminate frame reordering, follow a one-in-one-out encoding mode
+    if ((avctx->flags & AV_CODEC_FLAG_LOW_DELAY) && avctx->codec_id == AV_CODEC_ID_H264) {
+        status = VTSessionSetProperty(vtctx->session,
+                                      kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
+                                      kCFBooleanTrue);
+
+        if (status) {
+            av_log(avctx, AV_LOG_ERROR, "Error setting low latency property: %d\n", status);
+        }
+    }
+
     status = VTCompressionSessionPrepareToEncodeFrames(vtctx->session);
     if (status) {
         av_log(avctx, AV_LOG_ERROR, "Error: cannot prepare encoder: %d\n", status);
