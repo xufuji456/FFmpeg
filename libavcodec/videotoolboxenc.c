@@ -251,8 +251,6 @@ typedef struct VTEncContext {
 
     /* can't be bool type since AVOption will access it as int */
     int a53_cc;
-
-    int low_latency;
 } VTEncContext;
 
 static int vtenc_populate_extradata(AVCodecContext   *avctx,
@@ -1440,16 +1438,6 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
 
         if (status) {
             av_log(avctx, AV_LOG_ERROR, "Error setting realtime property: %d\n", status);
-        }
-    }
-
-    if (vtctx->low_latency) {
-        status = VTSessionSetProperty(vtctx->session,
-                                      kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
-                                      kCFBooleanTrue);
-
-        if (status) {
-            av_log(avctx, AV_LOG_ERROR, "Error setting low latency property: %d\n", status);
         }
     }
 
