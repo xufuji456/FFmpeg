@@ -64,9 +64,19 @@ typedef OSStatus (*getParameterSetAtIndex)(CMFormatDescriptionRef videoDesc,
                                            int *NALUnitHeaderLengthOut);
 
 /*
- * Keys that are not present in all versions of VideoToolbox need to be
- * accessed from compat_keys, or it will cause compiler errors when compiling
- * for older OS versions.
+ * Symbols that aren't available in MacOS 10.8 and iOS 8.0 need to be accessed
+ * from compat_keys, or it will cause compiler errors when compiling for older
+ * OS versions.
+ *
+ * For example, kVTCompressionPropertyKey_H264EntropyMode was added in
+ * MacOS 10.9. If this constant were used directly, a compiler would generate
+ * an error when it has access to the MacOS 10.8 headers, but does not have
+ * 10.9 headers.
+ *
+ * Runtime errors will still occur when unknown keys are set. A warning is
+ * logged and encoding continues where possible.
+ *
+ * When adding new symbols, they should be loaded/set in loadVTEncSymbols().
  */
 static struct{
     CFStringRef kCVImageBufferColorPrimaries_ITU_R_2020;
@@ -1252,6 +1262,13 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
                                           compat_keys.kVTCompressionPropertyKey_TargetQualityForAlpha,
                                           alpha_quality_num);
             CFRelease(alpha_quality_num);
+
+            if (status) {
+                av_log(avctx,
+                       AV_LOG_ERROR,
+                       "Error setting alpha quality: %d\n",
+                       status);
+            }
         }
     }
 
