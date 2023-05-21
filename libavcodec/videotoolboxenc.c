@@ -108,8 +108,6 @@ static struct{
     CFStringRef kVTProfileLevel_H264_High_AutoLevel;
     CFStringRef kVTProfileLevel_H264_Extended_5_0;
     CFStringRef kVTProfileLevel_H264_Extended_AutoLevel;
-    CFStringRef kVTProfileLevel_H264_ConstrainedBaseline_AutoLevel;
-    CFStringRef kVTProfileLevel_H264_ConstrainedHigh_AutoLevel;
 
     CFStringRef kVTProfileLevel_HEVC_Main_AutoLevel;
     CFStringRef kVTProfileLevel_HEVC_Main10_AutoLevel;
@@ -173,8 +171,6 @@ static void loadVTEncSymbols(void){
     GET_SYM(kVTProfileLevel_H264_High_AutoLevel,     "H264_High_AutoLevel");
     GET_SYM(kVTProfileLevel_H264_Extended_5_0,       "H264_Extended_5_0");
     GET_SYM(kVTProfileLevel_H264_Extended_AutoLevel, "H264_Extended_AutoLevel");
-    GET_SYM(kVTProfileLevel_H264_ConstrainedBaseline_AutoLevel, "H264_ConstrainedBaseline_AutoLevel");
-    GET_SYM(kVTProfileLevel_H264_ConstrainedHigh_AutoLevel,     "H264_ConstrainedHigh_AutoLevel");
 
     GET_SYM(kVTProfileLevel_HEVC_Main_AutoLevel,     "HEVC_Main_AutoLevel");
     GET_SYM(kVTProfileLevel_HEVC_Main10_AutoLevel,   "HEVC_Main10_AutoLevel");
@@ -747,15 +743,8 @@ static bool get_vt_h264_profile_level(AVCodecContext *avctx,
 
         case H264_PROF_BASELINE:
             switch (vtctx->level) {
-                case  0: {
-                    // check avctx->profile has been set constrained_baseline
-                    if (avctx->profile == FF_PROFILE_H264_CONSTRAINED_BASELINE) {
-                        *profile_level_val = compat_keys.kVTProfileLevel_H264_ConstrainedBaseline_AutoLevel;
-                    } else {
-                        *profile_level_val = compat_keys.kVTProfileLevel_H264_Baseline_AutoLevel;
-                    }
-                    break;
-                }
+                case  0: *profile_level_val =
+                                  compat_keys.kVTProfileLevel_H264_Baseline_AutoLevel; break;
                 case 13: *profile_level_val = kVTProfileLevel_H264_Baseline_1_3;       break;
                 case 30: *profile_level_val = kVTProfileLevel_H264_Baseline_3_0;       break;
                 case 31: *profile_level_val = kVTProfileLevel_H264_Baseline_3_1;       break;
@@ -795,15 +784,6 @@ static bool get_vt_h264_profile_level(AVCodecContext *avctx,
 
         case H264_PROF_HIGH:
             switch (vtctx->level) {
-                case  0: {
-                    // check avctx->profile has been set constrained_high
-                    if (avctx->profile == (FF_PROFILE_H264_HIGH | FF_PROFILE_H264_CONSTRAINED)) {
-                        *profile_level_val = compat_keys.kVTProfileLevel_H264_ConstrainedHigh_AutoLevel;
-                    } else {
-                        *profile_level_val = compat_keys.kVTProfileLevel_H264_High_AutoLevel;
-                    }
-                    break;
-                }
                 case  0: *profile_level_val =
                                   compat_keys.kVTProfileLevel_H264_High_AutoLevel; break;
                 case 30: *profile_level_val =
