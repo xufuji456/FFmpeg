@@ -14651,6 +14651,8 @@ Show only filters with queued frames.
 Show only filters with non-zero stats.
 @item noeof
 Show only filters with non-eof stat.
+@item nodisabled
+Show only filters that are enabled in timeline.
 @end table
 
 @item flags, f
@@ -14658,6 +14660,12 @@ Set flags which enable which stats are shown in video.
 
 Available values for flags are:
 @table @samp
+@item none
+All flags turned off.
+
+@item all
+All flags turned on.
+
 @item queue
 Display number of queued frames in each link.
 
@@ -14705,6 +14713,9 @@ Display number of samples given out from filter.
 
 @item sample_count_delta
 Display delta number of samples between above two values.
+
+@item disabled
+Show the timeline filter status.
 @end table
 
 @item rate, r
