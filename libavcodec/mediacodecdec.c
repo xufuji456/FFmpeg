@@ -394,6 +394,10 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
     ff_AMediaFormat_setString(format, "mime", codec_mime);
     ff_AMediaFormat_setInt32(format, "width", avctx->width);
     ff_AMediaFormat_setInt32(format, "height", avctx->height);
+    // low-latency mode: available in Android api 30
+    if (avctx->flags & AV_CODEC_FLAG_LOW_DELAY) {
+        ff_AMediaFormat_setInt32(format, "low-latency", 1);
+    }
 
     s->ctx = av_mallocz(sizeof(*s->ctx));
     if (!s->ctx) {
