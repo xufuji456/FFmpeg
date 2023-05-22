@@ -395,6 +395,12 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
     ff_AMediaFormat_setInt32(format, "width", avctx->width);
     ff_AMediaFormat_setInt32(format, "height", avctx->height);
 
+    sdk_int = ff_Build_SDK_INT(avctx);
+    // low-latency mode: available in Android api 30
+    if (sdk_int >= 30 && (avctx->flags & AV_CODEC_FLAG_LOW_DELAY)) {
+        ff_AMediaFormat_setInt32(format, "low-latency", 1);
+    }
+
     s->ctx = av_mallocz(sizeof(*s->ctx));
     if (!s->ctx) {
         av_log(avctx, AV_LOG_ERROR, "Failed to allocate MediaCodecDecContext\n");
@@ -414,7 +420,6 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
            "MediaCodec started successfully: codec = %s, ret = %d\n",
            s->ctx->codec_name, ret);
 
-    sdk_int = ff_Build_SDK_INT(avctx);
     /* ff_Build_SDK_INT can fail when target API < 24 and JVM isn't available.
      * If we don't check sdk_int > 0, the workaround might be enabled by
      * mistake.
