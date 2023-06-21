@@ -1536,6 +1536,12 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
         }
     }
 
+    // low-latency mode: eliminate frame reordering, follow a one-in-one-out encoding mode
+    if ((avctx->flags & AV_CODEC_FLAG_LOW_DELAY) && avctx->codec_id == AV_CODEC_ID_H264) {
+        status = VTSessionSetProperty(vtctx->session,
+                                      compat_keys.kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
+                                      kCFBooleanTrue);
+
         if (status) {
             av_log(avctx, AV_LOG_ERROR, "Error setting low latency property: %d\n", status);
         }
@@ -1683,13 +1689,6 @@ static int vtenc_configure_encoder(AVCodecContext *avctx)
                              kCFBooleanTrue);
     }
 #endif
-
-    // low-latency mode: eliminate frame reordering, follow a one-in-one-out encoding mode
-    if ((avctx->flags & AV_CODEC_FLAG_LOW_DELAY) && avctx->codec_id == AV_CODEC_ID_H264) {
-        CFDictionarySetValue(enc_info,
-                             compat_keys.kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
-                             kCFBooleanTrue);
-    }
 
     if (avctx->pix_fmt != AV_PIX_FMT_VIDEOTOOLBOX) {
         status = create_cv_pixel_buffer_info(avctx, &pixel_buffer_info);
