@@ -3762,8 +3762,8 @@ Set size of segment over which cross-correlation is calculated.
 Default is 256. Allowed range is from 2 to 131072.
 
 @item algo
-Set algorithm for cross-correlation. Can be @code{slow} or @code{fast}.
-Default is @code{slow}. Fast algorithm assumes mean values over any given segment
+Set algorithm for cross-correlation. Can be @code{slow} or @code{fast} or @code{best}.
+Default is @code{best}. Fast algorithm assumes mean values over any given segment
 are always zero and thus need much less calculations to make.
 This is generally not true, but is valid for typical audio streams.
 @end table
@@ -8482,10 +8482,10 @@ This filter supports the all above options as @ref{commands}.
 @section bbox
 
 Compute the bounding box for the non-black pixels in the input frame
-luminance plane.
+luma plane.
 
 This filter computes the bounding box containing all the pixels with a
-luminance value greater than the minimum allowed value.
+luma value greater than the minimum allowed value.
 The parameters describing the bounding box are printed on the filter
 log.
 
@@ -8493,7 +8493,7 @@ The filter accepts the following option:
 
 @table @option
 @item min_val
-Set the minimal luminance value. Default is @code{16}.
+Set the minimal luma value. Default is @code{16}.
 @end table
 
 @subsection Commands
@@ -8616,14 +8616,14 @@ Default value is 0.98.
 @item pixel_black_th, pix_th
 Set the threshold for considering a pixel "black".
 
-The threshold expresses the maximum pixel luminance value for which a
+The threshold expresses the maximum pixel luma value for which a
 pixel is considered "black". The provided value is scaled according to
 the following equation:
 @example
-@var{absolute_threshold} = @var{luminance_minimum_value} + @var{pixel_black_th} * @var{luminance_range_size}
+@var{absolute_threshold} = @var{luma_minimum_value} + @var{pixel_black_th} * @var{luma_range_size}
 @end example
 
-@var{luminance_range_size} and @var{luminance_minimum_value} depend on
+@var{luma_range_size} and @var{luma_minimum_value} depend on
 the input video format, the range is [0-255] for YUV full-range
 formats and [16-235] for YUV non full-range formats.
 
@@ -14613,7 +14613,7 @@ The filter accepts the following options:
 
 @table @option
 @item lum_expr, lum
-Set the luminance expression.
+Set the luma expression.
 @item cb_expr, cb
 Set the chrominance blue expression.
 @item cr_expr, cr
@@ -14638,7 +14638,7 @@ colorspace.
 If one of the chrominance expression is not defined, it falls back on the other
 one. If no alpha expression is specified it will evaluate to opaque value.
 If none of chrominance expressions are specified, they will evaluate
-to the luminance expression.
+to the luma expression.
 
 The expressions can use the following variables and functions:
 
@@ -14669,7 +14669,7 @@ Return the value of the pixel at location (@var{x},@var{y}) of the current
 plane.
 
 @item lum(x, y)
-Return the value of the pixel at location (@var{x},@var{y}) of the luminance
+Return the value of the pixel at location (@var{x},@var{y}) of the luma
 plane.
 
 @item cb(x, y)
@@ -16665,11 +16665,18 @@ Size of the tone-mapping LUT, between @code{2} and @code{1024}. Defaults to
 @code{256}. Note that this figure is squared when combined with
 @code{peak_detect}.
 
-@item hybrid_mix
-If nonzero, this much of the upper range of the tone-mapped result is smoothly
-mixed with a per-channel (LMS) tone-mapped version. Helps avoid unnatural
-blown-out highlights when tone-mapping very bright, strongly saturated colors.
-Defaults to @code{0.2}.
+@item contrast_recovery
+Contrast recovery strength. If set to a value above @code{0.0}, the source
+image will be divided into high-frequency and low-frequency components, and a
+portion of the high-frequency image is added back onto the tone-mapped output.
+May cause excessive ringing artifacts for some HDR sources, but can improve the
+subjective sharpness and detail left over in the image after tone-mapping.
+Defaults to @code{0.30}.
+
+@item contrast_smoothness
+Contrast recovery lowpass kernel size. Defaults to @code{3.5}. Increasing or
+decreasing this will affect the visual appearance substantially. Has no effect
+when @code{contrast_recovery} is disabled.
 @end table
 
 @subsubsection Dithering
@@ -17129,7 +17136,7 @@ set blue component expression
 alpha component expression
 
 @item y
-set Y/luminance component expression
+set Y/luma component expression
 @item u
 set U/Cb component expression
 @item v
@@ -17204,7 +17211,7 @@ lutyuv="y=negval:u=negval:v=negval"
 @end example
 
 @item
-Negate luminance:
+Negate luma:
 @example
 lutyuv=y=negval
 @end example
@@ -17234,7 +17241,7 @@ format=rgba,lutrgb=a="maxval-minval/2"
 @end example
 
 @item
-Correct luminance gamma by a factor of 0.5:
+Correct luma gamma by a factor of 0.5:
 @example
 lutyuv=y=gammaval(0.5)
 @end example
@@ -19443,10 +19450,10 @@ Honor the quality commands for this subfilter.
 Do chrominance filtering, too (default).
 
 @item y/nochrom
-Do luminance filtering only (no chrominance).
+Do luma filtering only (no chrominance).
 
 @item n/noluma
-Do chrominance filtering only (no luminance).
+Do chrominance filtering only (no luma).
 @end table
 
 These options can be appended after the subfilter name, separated by a '|'.
@@ -19518,7 +19525,7 @@ larger -> stronger filtering
 @item al/autolevels[:f/fullyrange], automatic brightness / contrast correction
 @table @option
 @item f/fullyrange
-Stretch luminance to @code{0-255}.
+Stretch luma to @code{0-255}.
 @end table
 
 @item lb/linblenddeint
@@ -19586,7 +19593,7 @@ pp=default/tmpnoise|1|2|3
 @end example
 
 @item
-Apply deblocking on luminance only, and switch vertical deblocking on or off
+Apply deblocking on luma only, and switch vertical deblocking on or off
 automatically depending on available CPU time:
 @example
 pp=hb|y/vb|a
@@ -25032,7 +25039,7 @@ This filter supports same @ref{commands} as options.
 @section waveform
 Video waveform monitor.
 
-The waveform monitor plots color component intensity. By default luminance
+The waveform monitor plots color component intensity. By default luma
 only. Each column of the waveform corresponds to a column of pixels in the
 source video.
 
@@ -25087,7 +25094,7 @@ correction is easy to perform by making level adjustments the three waveforms.
 Default is @code{stack}.
 
 @item components, c
-Set which color components to display. Default is 1, which means only luminance
+Set which color components to display. Default is 1, which means only luma
 or red color component if input is in RGB colorspace. If is set for example to
 7 it will display all 3 (if) available color components.
 
@@ -28589,7 +28596,7 @@ color=c=red@@0.2:s=qcif:r=10
 
 @item
 If the input content is to be ignored, @code{nullsrc} can be used. The
-following command generates noise in the luminance plane by employing
+following command generates noise in the luma plane by employing
 the @code{geq} filter:
 @example
 nullsrc=s=256x256, geq=random(1)*255:128:128
@@ -30702,6 +30709,9 @@ Set the frequency scale used. Allowed values are:
 @item bark
 @item mel
 @item erbs
+@item sqrt
+@item cbrt
+@item qdrt
 @end table
 Default value is @code{linear}.
 
@@ -30774,6 +30784,13 @@ Direction from up to down.
 @item du
 Direction from down to up.
 @end table
+
+@item bar
+Set the ratio of bargraph display to display size. Default is 0.
+
+@item rotation
+Set color rotation, must be in [-1.0, 1.0] range.
+Default value is @code{0}.
 @end table
 
 @section showfreqs

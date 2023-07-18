@@ -1171,8 +1171,9 @@ static av_cold int nvenc_setup_h264_config(AVCodecContext *avctx)
 
     if (ctx->intra_refresh) {
         h264->enableIntraRefresh = 1;
-        h264->intraRefreshPeriod = avctx->gop_size;
-        h264->intraRefreshCnt = avctx->gop_size - 1;
+        h264->intraRefreshPeriod = cc->gopLength;
+        h264->intraRefreshCnt = cc->gopLength - 1;
+        cc->gopLength = NVENC_INFINITE_GOPLENGTH;
 #ifdef NVENC_HAVE_SINGLE_SLICE_INTRA_REFRESH
         h264->singleSliceIntraRefresh = ctx->single_slice_intra_refresh;
 #endif
@@ -1190,11 +1191,7 @@ static av_cold int nvenc_setup_h264_config(AVCodecContext *avctx)
         h264->maxNumRefFrames = ctx->dpb_size;
     }
 
-    if (ctx->intra_refresh) {
-        h264->idrPeriod = NVENC_INFINITE_GOPLENGTH;
-    } else if (avctx->gop_size >= 0) {
-        h264->idrPeriod = avctx->gop_size;
-    }
+    h264->idrPeriod = cc->gopLength;
 
     if (IS_CBR(cc->rcParams.rateControlMode)) {
         h264->outputBufferingPeriodSEI = 1;
@@ -1295,8 +1292,9 @@ static av_cold int nvenc_setup_hevc_config(AVCodecContext *avctx)
 
     if (ctx->intra_refresh) {
         hevc->enableIntraRefresh = 1;
-        hevc->intraRefreshPeriod = avctx->gop_size;
-        hevc->intraRefreshCnt = avctx->gop_size - 1;
+        hevc->intraRefreshPeriod = cc->gopLength;
+        hevc->intraRefreshCnt = cc->gopLength - 1;
+        cc->gopLength = NVENC_INFINITE_GOPLENGTH;
 #ifdef NVENC_HAVE_SINGLE_SLICE_INTRA_REFRESH
         hevc->singleSliceIntraRefresh = ctx->single_slice_intra_refresh;
 #endif
@@ -1316,11 +1314,7 @@ static av_cold int nvenc_setup_hevc_config(AVCodecContext *avctx)
         hevc->maxNumRefFramesInDPB = ctx->dpb_size;
     }
 
-    if (ctx->intra_refresh) {
-        hevc->idrPeriod = NVENC_INFINITE_GOPLENGTH;
-    } else if (avctx->gop_size >= 0) {
-        hevc->idrPeriod = avctx->gop_size;
-    }
+    hevc->idrPeriod = cc->gopLength;
 
     if (IS_CBR(cc->rcParams.rateControlMode)) {
         hevc->outputBufferingPeriodSEI = 1;
@@ -1413,13 +1407,12 @@ static av_cold int nvenc_setup_av1_config(AVCodecContext *avctx)
 
     if (ctx->intra_refresh) {
         av1->enableIntraRefresh = 1;
-        av1->intraRefreshPeriod = avctx->gop_size;
-        av1->intraRefreshCnt = avctx->gop_size - 1;
-
-        av1->idrPeriod = NVENC_INFINITE_GOPLENGTH;
-    } else if (avctx->gop_size >= 0) {
-        av1->idrPeriod = avctx->gop_size;
+        av1->intraRefreshPeriod = cc->gopLength;
+        av1->intraRefreshCnt = cc->gopLength - 1;
+        cc->gopLength = NVENC_INFINITE_GOPLENGTH;
     }
+
+    av1->idrPeriod = cc->gopLength;
 
     if (IS_CBR(cc->rcParams.rateControlMode)) {
         av1->enableBitstreamPadding = 1;
@@ -1603,23 +1596,21 @@ FF_ENABLE_DEPRECATION_WARNINGS
     }
 
     if (avctx->gop_size > 0) {
-        if (avctx->max_b_frames >= 0) {
-            /* 0 is intra-only, 1 is I/P only, 2 is one B-Frame, 3 two B-frames, and so on. */
-            ctx->encode_config.frameIntervalP = avctx->max_b_frames + 1;
-        }
-
+        // only overwrite preset if a GOP size was selected as input
         ctx->encode_config.gopLength = avctx->gop_size;
     } else if (avctx->gop_size == 0) {
         ctx->encode_config.frameIntervalP = 0;
         ctx->encode_config.gopLength = 1;
     }
 
+    if (avctx->max_b_frames >= 0 && ctx->encode_config.gopLength > 1) {
+        /* 0 is intra-only, 1 is I/P only, 2 is one B-Frame, 3 two B-frames, and so on. */
+        ctx->encode_config.frameIntervalP = avctx->max_b_frames + 1;
+    }
+
     /* force to enable intra refresh */
     if(ctx->single_slice_intra_refresh)
         ctx->intra_refresh = 1;
-
-    if (ctx->intra_refresh)
-        ctx->encode_config.gopLength = NVENC_INFINITE_GOPLENGTH;
 
     nvenc_recalc_surfaces(avctx);
 
