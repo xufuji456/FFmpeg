@@ -248,11 +248,12 @@ static const struct {
     { "RVI",      "rvi",      AV_CPU_FLAG_RVI },
     { "RVF",      "rvf",      AV_CPU_FLAG_RVF },
     { "RVD",      "rvd",      AV_CPU_FLAG_RVD },
+    { "RVBaddr",  "rvb_a",    AV_CPU_FLAG_RVB_ADDR },
+    { "RVBbasic", "rvb_b",    AV_CPU_FLAG_RVB_BASIC },
     { "RVVi32",   "rvv_i32",  AV_CPU_FLAG_RVV_I32 },
     { "RVVf32",   "rvv_f32",  AV_CPU_FLAG_RVV_F32 },
     { "RVVi64",   "rvv_i64",  AV_CPU_FLAG_RVV_I64 },
     { "RVVf64",   "rvv_f64",  AV_CPU_FLAG_RVV_F64 },
-    { "RVBbasic", "rvb_b",    AV_CPU_FLAG_RVB_BASIC },
 #elif ARCH_MIPS
     { "MMI",      "mmi",      AV_CPU_FLAG_MMI },
     { "MSA",      "msa",      AV_CPU_FLAG_MSA },
@@ -666,7 +667,7 @@ static int bench_init_linux(void)
 
     state.sysfd = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
     if (state.sysfd == -1) {
-        perror("syscall");
+        perror("perf_event_open");
         return -1;
     }
     return 0;
