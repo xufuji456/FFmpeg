@@ -522,6 +522,7 @@ extern const FFCodec ff_paf_audio_decoder;
 extern const FFCodec ff_qcelp_decoder;
 extern const FFCodec ff_qdm2_decoder;
 extern const FFCodec ff_qdmc_decoder;
+extern const FFCodec ff_qoa_decoder;
 extern const FFCodec ff_ra_144_encoder;
 extern const FFCodec ff_ra_144_decoder;
 extern const FFCodec ff_ra_288_decoder;
@@ -821,6 +822,8 @@ extern LIBX264_CONST FFCodec ff_libx264_encoder;
 #endif
 extern const FFCodec ff_libx264rgb_encoder;
 extern FFCodec ff_libx265_encoder;
+extern const FFCodec ff_libxeve_encoder;
+extern const FFCodec ff_libxevd_decoder;
 extern const FFCodec ff_libxavs_encoder;
 extern const FFCodec ff_libxavs2_encoder;
 extern const FFCodec ff_libxvid_encoder;
