@@ -761,6 +761,22 @@ static int get_audio_config(AVFormatContext *s)
     return 0;
 }
 
+static NSArray* getDevicesWithMediaType(AVMediaType mediaType) {
+#if ((TARGET_OS_IPHONE && __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000) ||
+       (TARGET_OS_OSX && __MAC_OS_X_VERSION_MAX_ALLOWED >= 101500))
+    if (@available(macOS 10.15, iOS 10.0, *)) {
+        AVCaptureDeviceDiscoverySession *captureDeviceDiscoverySession =
+            [AVCaptureDeviceDiscoverySession
+            discoverySessionWithDeviceTypes:@[AVCaptureDeviceTypeBuiltInWideAngleCamera]
+                                  mediaType:mediaType
+                                   position:AVCaptureDevicePositionUnspecified];
+        return [captureDeviceDiscoverySession devices];
+    }
+#endif
+    // fallback
+    return [AVCaptureDevice devicesWithMediaType:mediaType];
+}
+
 static int avf_read_header(AVFormatContext *s)
 {
     int ret = 0;
@@ -770,8 +786,8 @@ static int avf_read_header(AVFormatContext *s)
     AVCaptureDevice *video_device = nil;
     AVCaptureDevice *audio_device = nil;
     // Find capture device
-    NSArray *devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
-    NSArray *devices_muxed = [AVCaptureDevice devicesWithMediaType:AVMediaTypeMuxed];
+    NSArray *devices       = getDevicesWithMediaType(AVMediaTypeVideo);
+    NSArray *devices_muxed = getDevicesWithMediaType(AVMediaTypeMuxed);
 
     ctx->num_video_devices = [devices count] + [devices_muxed count];
 
@@ -806,7 +822,7 @@ static int avf_read_header(AVFormatContext *s)
 #endif
 
         av_log(ctx, AV_LOG_INFO, "AVFoundation audio devices:\n");
-        devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio];
+        devices = getDevicesWithMediaType(AVMediaTypeAudio);
         for (AVCaptureDevice *device in devices) {
             const char *name = [[device localizedName] UTF8String];
             int index  = [devices indexOfObject:device];
@@ -930,7 +946,7 @@ static int avf_read_header(AVFormatContext *s)
 
     // get audio device
     if (ctx->audio_device_index >= 0) {
-        NSArray *devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio];
+        NSArray *devices = getDevicesWithMediaType(AVMediaTypeAudio);
 
         if (ctx->audio_device_index >= [devices count]) {
             av_log(ctx, AV_LOG_ERROR, "Invalid audio device index\n");
@@ -943,7 +959,7 @@ static int avf_read_header(AVFormatContext *s)
         if (!strncmp(ctx->audio_filename, "default", 7)) {
             audio_device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio];
         } else {
-        NSArray *devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio];
+        NSArray *devices = getDevicesWithMediaType(AVMediaTypeAudio);
 
         for (AVCaptureDevice *device in devices) {
             if (!strncmp(ctx->audio_filename, [[device localizedName] UTF8String], strlen(ctx->audio_filename))) {
