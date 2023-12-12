@@ -34,6 +34,7 @@ OBJS = allformats.o         \
        utils.o              \
        version.o            \
        avc.o                \
+       ijkutils.o           \
 
 OBJS-$(HAVE_LIBC_MSVCRT)                 += file_open.o
 
