@@ -83,6 +83,8 @@ struct segment {
     uint8_t iv[16];
     /* associated Media Initialization Section, treated as a segment */
     struct segment *init_section;
+    int64_t start_time;
+    int64_t prev_duration;
 };
 
 struct rendition;
@@ -747,6 +749,9 @@ static int parse_playlist(HLSContext *c, const char *url,
     struct segment **prev_segments = NULL;
     int prev_n_segments = 0;
     int64_t prev_start_seq_no = -1;
+    int64_t total_duration = 0;
+    int64_t prev_duration  = 0;
+    int64_t prev_duration_discontinuity = 0;
 
     if (is_http && !in && c->http_persistent && c->playlist_pb) {
         in = c->playlist_pb;
@@ -921,6 +926,8 @@ static int parse_playlist(HLSContext *c, const char *url,
             ptr = strchr(ptr, '@');
             if (ptr)
                 seg_offset = strtoll(ptr+1, NULL, 10);
+        }  else if (av_strstart(line, "#EXT-X-DISCONTINUITY", &ptr)) {
+            prev_duration = prev_duration_discontinuity;
         } else if (av_strstart(line, "#", NULL)) {
             av_log(c->ctx, AV_LOG_INFO, "Skip ('%s')\n", line);
             continue;
@@ -988,6 +995,10 @@ static int parse_playlist(HLSContext *c, const char *url,
                                     " set to default value to 1ms.\n", seg->url);
                     duration = 0.001 * AV_TIME_BASE;
                 }
+                prev_duration_discontinuity += duration;
+                seg->prev_duration = prev_duration;
+                seg->start_time = total_duration;
+                total_duration += duration;
                 seg->duration = duration;
                 seg->key_type = key_type;
                 dynarray_add(&pls->segments, &pls->n_segments, seg);
@@ -2421,6 +2432,28 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
             }
         }
 
+        if (c->playlists[minplaylist]->finished) {
+            struct playlist *pls = c->playlists[minplaylist];
+            int seq_no = pls->cur_seq_no - pls->start_seq_no;
+            if (seq_no < pls->n_segments && s->streams[pkt->stream_index]) {
+                struct segment *seg = pls->segments[seq_no];
+                int64_t pred = av_rescale_q(seg->prev_duration,
+                                            AV_TIME_BASE_Q,
+                                            s->streams[pkt->stream_index]->time_base);
+                int64_t max_ts = av_rescale_q(seg->start_time + seg->duration,
+                                              AV_TIME_BASE_Q,
+                                              s->streams[pkt->stream_index]->time_base);
+                /* EXTINF duration is not precise enough */
+                max_ts += 2 * AV_TIME_BASE;
+                if (s->start_time > 0) {
+                    max_ts += av_rescale_q(s->start_time,
+                                           AV_TIME_BASE_Q,
+                                           s->streams[pkt->stream_index]->time_base);
+                }
+                if (pkt->dts != AV_NOPTS_VALUE && pkt->dts + pred < max_ts) pkt->dts += pred;
+                if (pkt->pts != AV_NOPTS_VALUE && pkt->pts + pred < max_ts) pkt->pts += pred;
+            }
+        }
         return 0;
     }
     return AVERROR_EOF;
