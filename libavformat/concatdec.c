@@ -758,8 +758,11 @@ static int concat_read_packet(AVFormatContext *avf, AVPacket *pkt)
                 return ret;
             continue;
         }
-        if (ret < 0)
+        if (ret < 0) {
+            if (avf->pb && cat->avf->pb)
+                avf->pb->error = cat->avf->pb->error;
             return ret;
+        }
         if ((ret = match_streams(avf)) < 0) {
             return ret;
         }
