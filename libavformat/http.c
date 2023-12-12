@@ -1408,6 +1408,7 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
     uint64_t off = s->off;
     const char *method;
     int send_expect_100 = 0;
+    uint64_t filesize = s->filesize;
 
     av_bprint_init_for_buffer(&request, s->buffer, sizeof(s->buffer));
 
@@ -1549,6 +1550,15 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
 
     if (s->new_location)
         s->off = off;
+
+    // When server missing 'Content-Range' header for range request, try to fix
+    if (off > 0 && s->off <= 0 && (off + s->filesize == filesize)) {
+        av_log(NULL, AV_LOG_WARNING,
+               "Missing Content-Range, fix before:(%"PRId64",%"PRId64"), after:(%"PRId64",%"PRId64")",
+               s->off, s->filesize, off, filesize);
+        s->off      = off;
+        s->filesize = filesize;
+    }
 
     err = (off == s->off) ? 0 : -1;
 done:
