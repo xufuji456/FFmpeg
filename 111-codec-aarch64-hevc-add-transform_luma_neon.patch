@@ -1,0 +1,96 @@
+From 440092a86635c40d40b3ddd7fd507d057011ca3a Mon Sep 17 00:00:00 2001
+From: xufuji456 <839789740@qq.com>
+Date: Thu, 13 Apr 2023 21:31:01 +0800
+Subject: [PATCH] codec/aarch64/hevc: add transform_luma_neon
+
+got 56% speed up (run_count=1000, CPU=Cortex A53)
+transform_4x4_luma_neon: 45 transform_4x4_luma_c: 103
+
+Signed-off-by: xufuji456 <839789740@qq.com>
+---
+ libavcodec/aarch64/hevcdsp_idct_neon.S    | 48 +++++++++++++++++++++++
+ libavcodec/aarch64/hevcdsp_init_aarch64.c |  2 +
+ 2 files changed, 50 insertions(+)
+
+diff --git a/libavcodec/aarch64/hevcdsp_idct_neon.S b/libavcodec/aarch64/hevcdsp_idct_neon.S
+index 994f0a47b6..4a25787070 100644
+--- a/libavcodec/aarch64/hevcdsp_idct_neon.S
++++ b/libavcodec/aarch64/hevcdsp_idct_neon.S
+@@ -842,6 +842,54 @@ tr_32x4 secondpass_10, 20 - 10
+ idct_32x32 8
+ idct_32x32 10
+ 
++.macro tr4_luma_shift r0, r1, r2, r3, shift
++        saddl       v0.4s, \r0, \r2         // c0 = src0 + src2
++        saddl       v1.4s, \r2, \r3         // c1 = src2 + src3
++        ssubl       v2.4s, \r0, \r3         // c2 = src0 - src3
++        smull       v3.4s, \r1, v21.4h      // c3 = 74 * src1
++
++        saddl       v7.4s, \r0, \r3         // src0 + src3
++        ssubw       v7.4s, v7.4s, \r2       // src0 - src2 + src3
++        mul         v7.4s, v7.4s, v18.4s    // dst2 = 74 * (src0 - src2 + src3)
++
++        mul         v5.4s, v0.4s, v19.4s    // 29 * c0
++        mul         v6.4s, v1.4s, v20.4s    // 55 * c1
++        add         v5.4s, v5.4s, v6.4s     // 29 * c0 + 55 * c1
++        add         v5.4s, v5.4s, v3.4s     // dst0 = 29 * c0 + 55 * c1 + c3
++
++        mul         v1.4s, v1.4s, v19.4s    // 29 * c1
++        mul         v6.4s, v2.4s, v20.4s    // 55 * c2
++        sub         v6.4s, v6.4s, v1.4s     // 55 * c2 - 29 * c1
++        add         v6.4s, v6.4s, v3.4s     // dst1 = 55 * c2 - 29 * c1 + c3
++
++        mul         v0.4s, v0.4s, v20.4s    // 55 * c0
++        mul         v2.4s, v2.4s, v19.4s    // 29 * c2
++        add         v0.4s, v0.4s, v2.4s     // 55 * c0 + 29 * c2
++        sub         v0.4s, v0.4s, v3.4s     // dst3 = 55 * c0 + 29 * c2 - c3
++
++        sqrshrn     \r0, v5.4s, \shift
++        sqrshrn     \r1, v6.4s, \shift
++        sqrshrn     \r2, v7.4s, \shift
++        sqrshrn     \r3, v0.4s, \shift
++.endm
++
++function ff_hevc_transform_luma_4x4_neon_8, export=1
++        ld1            {v28.4h-v31.4h}, [x0]
++        movi           v18.4s, #74
++        movi           v19.4s, #29
++        movi           v20.4s, #55
++        movi           v21.4h, #74
++
++        tr4_luma_shift v28.4h, v29.4h, v30.4h, v31.4h, #7
++        transpose_4x4H v28, v29, v30, v31, v22, v23, v24, v25
++
++        tr4_luma_shift v28.4h, v29.4h, v30.4h, v31.4h, #12
++        transpose_4x4H v28, v29, v30, v31, v22, v23, v24, v25
++
++        st1            {v28.4h-v31.4h}, [x0]
++        ret
++endfunc
++
+ // void ff_hevc_idct_NxN_dc_DEPTH_neon(int16_t *coeffs)
+ .macro idct_dc size, bitdepth
+ function ff_hevc_idct_\size\()x\size\()_dc_\bitdepth\()_neon, export=1
+diff --git a/libavcodec/aarch64/hevcdsp_init_aarch64.c b/libavcodec/aarch64/hevcdsp_init_aarch64.c
+index 4cc8732ad3..be1049a2ec 100644
+--- a/libavcodec/aarch64/hevcdsp_init_aarch64.c
++++ b/libavcodec/aarch64/hevcdsp_init_aarch64.c
+@@ -78,6 +78,7 @@ void ff_hevc_idct_4x4_dc_10_neon(int16_t *coeffs);
+ void ff_hevc_idct_8x8_dc_10_neon(int16_t *coeffs);
+ void ff_hevc_idct_16x16_dc_10_neon(int16_t *coeffs);
+ void ff_hevc_idct_32x32_dc_10_neon(int16_t *coeffs);
++void ff_hevc_transform_luma_4x4_neon_8(int16_t *coeffs);
+ void ff_hevc_sao_band_filter_8x8_8_neon(uint8_t *_dst, const uint8_t *_src,
+                                   ptrdiff_t stride_dst, ptrdiff_t stride_src,
+                                   const int16_t *sao_offset_val, int sao_left_class,
+@@ -146,6 +147,7 @@ av_cold void ff_hevc_dsp_init_aarch64(HEVCDSPContext *c, const int bit_depth)
+         c->idct_dc[1]                  = ff_hevc_idct_8x8_dc_8_neon;
+         c->idct_dc[2]                  = ff_hevc_idct_16x16_dc_8_neon;
+         c->idct_dc[3]                  = ff_hevc_idct_32x32_dc_8_neon;
++        c->transform_4x4_luma          = ff_hevc_transform_luma_4x4_neon_8;
+         c->sao_band_filter[0]          =
+         c->sao_band_filter[1]          =
+         c->sao_band_filter[2]          =
+-- 
+2.32.0 (Apple Git-132)
+

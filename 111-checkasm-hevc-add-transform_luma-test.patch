@@ -1,0 +1,58 @@
+From 35fe3c43f03002faaab3dcb9c954b2d7127edb34 Mon Sep 17 00:00:00 2001
+From: xufuji456 <839789740@qq.com>
+Date: Thu, 13 Apr 2023 14:41:15 +0800
+Subject: [PATCH] checkasm/hevc: add transform_luma test
+
+Signed-off-by: xufuji456 <839789740@qq.com>
+---
+ tests/checkasm/hevc_idct.c | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/tests/checkasm/hevc_idct.c b/tests/checkasm/hevc_idct.c
+index 338b8a23e4..446d69f931 100644
+--- a/tests/checkasm/hevc_idct.c
++++ b/tests/checkasm/hevc_idct.c
+@@ -84,6 +84,27 @@ static void check_idct_dc(HEVCDSPContext h, int bit_depth)
+     }
+ }
+ 
++static void check_transform_luma(HEVCDSPContext *h, int bit_depth)
++{
++    LOCAL_ALIGNED(32, int16_t, coeffs0, [32 * 32]);
++    LOCAL_ALIGNED(32, int16_t, coeffs1, [32 * 32]);
++
++    int block_size = 4;
++    int size = block_size * block_size;
++    declare_func_emms(AV_CPU_FLAG_MMXEXT, void, int16_t *coeffs);
++
++    randomize_buffers(coeffs0, size);
++    memcpy(coeffs1, coeffs0, sizeof(*coeffs0) * size);
++
++    if (check_func(h->transform_4x4_luma, "hevc_transform_luma_4x4_%d", bit_depth)) {
++        call_ref(coeffs0);
++        call_new(coeffs1);
++        if (memcmp(coeffs0, coeffs1, sizeof(*coeffs0) * size))
++            fail();
++        bench_new(coeffs1);
++    }
++}
++
+ void checkasm_check_hevc_idct(void)
+ {
+     int bit_depth;
+@@ -103,4 +124,12 @@ void checkasm_check_hevc_idct(void)
+         check_idct(h, bit_depth);
+     }
+     report("idct");
++
++    for (bit_depth = 8; bit_depth <= 12; bit_depth += 2) {
++        HEVCDSPContext h;
++
++        ff_hevc_dsp_init(&h, bit_depth);
++        check_transform_luma(&h, bit_depth);
++    }
++    report("transform_luma");
+ }
+-- 
+2.32.0 (Apple Git-132)
+

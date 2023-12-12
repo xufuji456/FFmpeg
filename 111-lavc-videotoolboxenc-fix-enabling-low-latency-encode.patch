@@ -1,0 +1,52 @@
+From 78fa9584e9884f453260c6802b43783bc5eb1fdf Mon Sep 17 00:00:00 2001
+From: xufuji456 <839789740@qq.com>
+Date: Wed, 21 Jun 2023 17:37:29 +0800
+Subject: [PATCH] lavc/videotoolboxenc: fix enabling low-latency encode
+
+Use CFDictionarySetValue to enable low-latency encoding mode.
+Since the key is a type of "EncoderSpecification", instead of "CompressionProperty".
+
+Signed-off-by: xufuji456 <839789740@qq.com>
+---
+ libavcodec/videotoolboxenc.c | 18 +++++++-----------
+ 1 file changed, 7 insertions(+), 11 deletions(-)
+
+diff --git a/libavcodec/videotoolboxenc.c b/libavcodec/videotoolboxenc.c
+index a313087876..6114351392 100644
+--- a/libavcodec/videotoolboxenc.c
++++ b/libavcodec/videotoolboxenc.c
+@@ -1536,17 +1536,6 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+         }
+     }
+ 
+-    // low-latency mode: eliminate frame reordering, follow a one-in-one-out encoding mode
+-    if ((avctx->flags & AV_CODEC_FLAG_LOW_DELAY) && avctx->codec_id == AV_CODEC_ID_H264) {
+-        status = VTSessionSetProperty(vtctx->session,
+-                                      compat_keys.kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
+-                                      kCFBooleanTrue);
+-
+-        if (status) {
+-            av_log(avctx, AV_LOG_ERROR, "Error setting low latency property: %d\n", status);
+-        }
+-    }
+-
+     if ((avctx->flags & AV_CODEC_FLAG_CLOSED_GOP) != 0) {
+         set_encoder_property_or_log(avctx,
+                                     compat_keys.kVTCompressionPropertyKey_AllowOpenGOP,
+@@ -1690,6 +1679,13 @@ static int vtenc_configure_encoder(AVCodecContext *avctx)
+     }
+ #endif
+ 
++    // low-latency mode: eliminate frame reordering, follow a one-in-one-out encoding mode
++    if ((avctx->flags & AV_CODEC_FLAG_LOW_DELAY) && avctx->codec_id == AV_CODEC_ID_H264) {
++        CFDictionarySetValue(enc_info,
++                             compat_keys.kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
++                             kCFBooleanTrue);
++    }
++
+     if (avctx->pix_fmt != AV_PIX_FMT_VIDEOTOOLBOX) {
+         status = create_cv_pixel_buffer_info(avctx, &pixel_buffer_info);
+         if (status)
+-- 
+2.32.0 (Apple Git-132)
+

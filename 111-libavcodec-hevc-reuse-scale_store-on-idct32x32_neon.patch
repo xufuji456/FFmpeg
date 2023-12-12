@@ -1,0 +1,47 @@
+From 19cb55e3ad6db226c9d89968b8236a4d0c206885 Mon Sep 17 00:00:00 2001
+From: xufuji456 <839789740@qq.com>
+Date: Fri, 24 Feb 2023 20:29:06 +0800
+Subject: [PATCH] libavcodec/hevc: reuse scale_store on idct32x32_neon
+
+---
+ libavcodec/arm/hevcdsp_idct_neon.S | 18 ++----------------
+ 1 file changed, 2 insertions(+), 16 deletions(-)
+
+diff --git a/libavcodec/arm/hevcdsp_idct_neon.S b/libavcodec/arm/hevcdsp_idct_neon.S
+index 75795e6a6a..41ca3b83a8 100644
+--- a/libavcodec/arm/hevcdsp_idct_neon.S
++++ b/libavcodec/arm/hevcdsp_idct_neon.S
+@@ -876,28 +876,14 @@ function func_tr_32x4_\name
+         movrel          r9, trans + 32
+         vld1.s16        {q0}, [r9, :128]!
+         vld1.s16        {q1}, [r9, :128]
+-
+-        bl              tr_block1
+-
+         add             r4, sp, #2048
+-        vld1.s16        {q14-q15}, [r4, :128]!
+-        butterfly32     q14, q10, q15, q11
+-        scale32         d22, d23, d20, d21, q1, q14, q10, q15, \shift
+-
+-        vld1.s16        {q14-q15}, [r4, :128]!
+-        butterfly32     q14, q12, q15, q13
+-        scale32         d2, d3, d28, d29, q1, q14, q12, q15, \shift
+ 
+-        transpose8_4x4  d22, d20, d2, d28
+-        transpose8_4x4  d29, d3, d21, d23
++        bl              tr_block1
+         mov             r1, r11
+         mov             r2, #64
+         mov             r8, #-64
+         add             r3, r11, #(56 + 3 * 64)
+-        store16         d22, d23, d20, d21, d2, d3, d28, d29, r8
+-
+-        @ reload multiplication coefficiens to q1
+-        vld1.s16        {q1}, [r9, :128]
++        scale_store     \shift
+ 
+         bl              tr_block2
+         add             r1, r11, #8
+-- 
+2.32.0 (Apple Git-132)
+

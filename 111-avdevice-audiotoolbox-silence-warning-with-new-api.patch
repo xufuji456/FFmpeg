@@ -1,0 +1,31 @@
+From af8ea2b070643ba4a4e7d9d9ee1ee0dbb6b7e6fa Mon Sep 17 00:00:00 2001
+From: xufuji456 <839789740@qq.com>
+Date: Sat, 9 Dec 2023 20:30:39 +0800
+Subject: [PATCH] avdevice/audiotoolbox: silence warning with new api
+
+Building with macOS platform, the compiler has a warning: 'kAudioObjectPropertyElementMaster' is deprecated in macOS 12.0
+
+Signed-off-by: xufuji456 <839789740@qq.com>
+---
+ libavdevice/audiotoolbox.m | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/libavdevice/audiotoolbox.m b/libavdevice/audiotoolbox.m
+index aa49e2c992..ae91a2bc62 100644
+--- a/libavdevice/audiotoolbox.m
++++ b/libavdevice/audiotoolbox.m
+@@ -85,7 +85,11 @@ static av_cold int at_write_header(AVFormatContext *avctx)
+     AudioObjectPropertyAddress prop;
+     prop.mSelector = kAudioHardwarePropertyDevices;
+     prop.mScope    = kAudioObjectPropertyScopeGlobal;
++#if !TARGET_OS_IPHONE && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1200
++    prop.mElement  = kAudioObjectPropertyElementMain;
++#else
+     prop.mElement  = kAudioObjectPropertyElementMaster;
++#endif
+     err = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &prop, 0, NULL, &data_size);
+     if (check_status(avctx, &err, "AudioObjectGetPropertyDataSize devices"))
+         return AVERROR(EINVAL);
+-- 
+2.32.0 (Apple Git-132)
+

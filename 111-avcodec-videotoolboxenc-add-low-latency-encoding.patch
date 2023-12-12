@@ -1,0 +1,55 @@
+From 246ebdade62fadff455a79d39f4f6f0d51e8f148 Mon Sep 17 00:00:00 2001
+From: xufuji456 <839789740@qq.com>
+Date: Fri, 19 May 2023 14:04:26 +0800
+Subject: [PATCH] avcodec/videotoolboxenc: add low-latency encoding
+
+When using low-latency mode, it eliminates frame reordering
+and follows a one-in-one-out encoding mode
+
+Signed-off-by: xufuji456 <839789740@qq.com>
+---
+ libavcodec/videotoolboxenc.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/libavcodec/videotoolboxenc.c b/libavcodec/videotoolboxenc.c
+index c6f22723d6..e91d17c132 100644
+--- a/libavcodec/videotoolboxenc.c
++++ b/libavcodec/videotoolboxenc.c
+@@ -105,6 +105,7 @@ static struct{
+ 
+     CFStringRef kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder;
+     CFStringRef kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder;
++    CFStringRef kVTVideoEncoderSpecification_EnableLowLatencyRateControl;
+ 
+     getParameterSetAtIndex CMVideoFormatDescriptionGetHEVCParameterSetAtIndex;
+ } compat_keys;
+@@ -171,6 +172,8 @@ static void loadVTEncSymbols(void){
+             "EnableHardwareAcceleratedVideoEncoder");
+     GET_SYM(kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder,
+             "RequireHardwareAcceleratedVideoEncoder");
++    GET_SYM(kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
++                "EnableLowLatencyRateControl");
+ }
+ 
+ typedef enum VT_H264Profile {
+@@ -1441,6 +1444,17 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
+         }
+     }
+ 
++    // low-latency mode: eliminate frame reordering, follow a one-in-one-out encoding mode
++    if ((avctx->flags & AV_CODEC_FLAG_LOW_DELAY) && avctx->codec_id == AV_CODEC_ID_H264) {
++        status = VTSessionSetProperty(vtctx->session,
++                                      compat_keys.kVTVideoEncoderSpecification_EnableLowLatencyRateControl,
++                                      kCFBooleanTrue);
++
++        if (status) {
++            av_log(avctx, AV_LOG_ERROR, "Error setting low latency property: %d\n", status);
++        }
++    }
++
+     status = VTCompressionSessionPrepareToEncodeFrames(vtctx->session);
+     if (status) {
+         av_log(avctx, AV_LOG_ERROR, "Error: cannot prepare encoder: %d\n", status);
+-- 
+2.32.0 (Apple Git-132)
+
