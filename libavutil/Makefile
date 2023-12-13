@@ -81,6 +81,7 @@ HEADERS = adler32.h                                                     \
           sha512.h                                                      \
           spherical.h                                                   \
           stereo3d.h                                                    \
+          thread.h                                                      \
           threadmessage.h                                               \
           time.h                                                        \
           timecode.h                                                    \
@@ -181,7 +182,6 @@ OBJS = adler32.o                                                        \
        xga_font_data.o                                                  \
        xtea.o                                                           \
        tea.o                                                            \
-       thread.o                                                         \
        tx.o                                                             \
        tx_float.o                                                       \
        tx_double.o                                                      \
