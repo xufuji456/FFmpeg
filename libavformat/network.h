@@ -338,4 +338,8 @@ int ff_connect_parallel(struct addrinfo *addrs, int timeout_ms_per_address,
                         int parallel, URLContext *h, int *fd,
                         int (*customize_fd)(void *, int, int), void *customize_ctx);
 
+int ff_sendto(int fd, const char *msg, int msg_len, int flag,
+              const struct sockaddr *addr,
+              socklen_t addrlen, int timeout, URLContext *h, int will_try_next);
+
 #endif /* AVFORMAT_NETWORK_H */

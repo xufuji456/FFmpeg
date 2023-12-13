@@ -53,11 +53,17 @@ typedef struct TCPContext {
     AVApplicationContext *app_ctx;
     int64_t dns_cache_timeout;
     int dns_cache_clear;
+    char uri[1024];
+    int fastopen;
+    int tcp_connected;
+    int fastopen_success;
 } TCPContext;
 
 #define OFFSET(x) offsetof(TCPContext, x)
 #define D AV_OPT_FLAG_DECODING_PARAM
 #define E AV_OPT_FLAG_ENCODING_PARAM
+#define FAST_OPEN_FLAG 0x20000000
+
 static const AVOption options[] = {
     { "listen",          "Listen for incoming connections",  OFFSET(listen),         AV_OPT_TYPE_INT, { .i64 = 0 },     0,       2,       .flags = D|E },
     { "local_port",      "Local port",                                         OFFSET(local_port),     AV_OPT_TYPE_STRING, { .str = NULL },     0,       0, .flags = D|E },
@@ -73,6 +79,7 @@ static const AVOption options[] = {
     { "ijkapplication",   "AVApplicationContext",                              OFFSET(app_ctx_intptr),   AV_OPT_TYPE_INT64, { .i64 = 0 }, INT64_MIN, INT64_MAX, .flags = D },
     { "dns_cache_timeout", "dns cache TTL (in microseconds)",                  OFFSET(dns_cache_timeout), AV_OPT_TYPE_INT, { .i64 = -1 },       -1, INT64_MAX, .flags = D|E },
     { "dns_cache_clear",   "clear dns cache",                                  OFFSET(dns_cache_clear), AV_OPT_TYPE_INT, { .i64 = 0},       -1, INT_MAX, .flags = D|E },
+    { "fastopen",          "enable fastopen",                                  OFFSET(fastopen),        AV_OPT_TYPE_INT, { .i64 = 0},       0, INT_MAX, .flags = D|E },
     { NULL }
 };
 
@@ -161,6 +168,12 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     DnsCacheEntry *dns_entry = NULL;
     s->open_timeout = 5000000;
     s->app_ctx = (AVApplicationContext *)(intptr_t)s->app_ctx_intptr;
+
+    if (s->fastopen) {
+        s->tcp_connected = 0;
+        strcpy(s->uri, uri);
+        return 0;
+    }
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
         &port, path, sizeof(path), uri);
@@ -277,17 +290,194 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     } else {
         ret = av_application_on_tcp_will_open(s->app_ctx);
         if (ret) {
-            av_log(NULL, AV_LOG_WARNING, "terminated by application in AVAPP_CTRL_WILL_TCP_OPEN");
+            av_log(NULL, AV_LOG_WARNING, "terminated by application in WILL_TCP_OPEN");
             goto fail1;
         }
         ret = ff_connect_parallel(ai, s->open_timeout / 1000, 3, h, &fd, customize_fd, s);
-        if (ret < 0)
+        if (av_application_on_tcp_did_open(s->app_ctx, ret, fd, &control)) {
+            av_log(NULL, AV_LOG_WARNING, "terminated by application in DID_TCP_OPEN");
             goto fail1;
-        if (av_application_on_tcp_did_open(s->app_ctx, ret, fd, &control))
+        }
+        if (ret < 0)
             goto fail1;
         if (s->dns_cache_timeout > 0 && !dns_entry && strcmp(control.ip, hostname_bak)) {
             add_dns_cache_entry(hostname_bak, cur_ai, s->dns_cache_timeout);
             av_log(NULL, AV_LOG_INFO, "Add dns cache hostname = %s, ip = %s\n", hostname_bak , control.ip);
+        }
+    }
+
+    h->is_streamed = 1;
+    s->fd = fd;
+
+    if (dns_entry) {
+        release_dns_cache_reference(hostname_bak, &dns_entry);
+    } else {
+        freeaddrinfo(ai);
+    }
+    return 0;
+
+ fail1:
+    if (fd >= 0)
+        closesocket(fd);
+    if (dns_entry) {
+        av_log(NULL, AV_LOG_ERROR, "Hit dns cache but connect fail: hostname = %s, ip = %s\n", hostname , control.ip);
+        release_dns_cache_reference(hostname_bak, &dns_entry);
+        remove_dns_cache_entry(hostname_bak);
+    } else {
+        freeaddrinfo(ai);
+    }
+    return ret;
+}
+
+/* return non zero if error */
+static int tcp_fast_open(URLContext *h, const char *uri, int flags, const char *http_request)
+{
+    struct addrinfo hints = { 0 }, *ai, *cur_ai;
+    int port, fd = -1;
+    TCPContext *s = h->priv_data;
+    const char *p;
+    char buf[256];
+    int ret;
+    char hostname[1024],proto[1024],path[1024];
+    char portstr[10];
+    char hostname_bak[1024] = {0};
+    AVAppTcpIOControl control = {0};
+    DnsCacheEntry *dns_entry = NULL;
+    s->open_timeout = 5000000;
+    s->app_ctx = (AVApplicationContext *)(intptr_t)s->app_ctx_intptr;
+    s->fastopen_success = 0; // different
+
+    av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
+        &port, path, sizeof(path), uri);
+    if (strcmp(proto, "tcp"))
+        return AVERROR(EINVAL);
+    if (port <= 0 || port >= 65536) {
+        av_log(h, AV_LOG_ERROR, "Port missing in uri\n");
+        return AVERROR(EINVAL);
+    }
+    p = strchr(uri, '?');
+    if (p) {
+        if (av_find_info_tag(buf, sizeof(buf), "listen", p)) {
+            char *endptr = NULL;
+            s->listen = strtol(buf, &endptr, 10);
+            /* assume if no digits were found it is a request to enable it */
+            if (buf == endptr)
+                s->listen = 1;
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "local_port", p)) {
+            av_freep(&s->local_port);
+            s->local_port = av_strdup(buf);
+            if (!s->local_port)
+                return AVERROR(ENOMEM);
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "local_addr", p)) {
+            av_freep(&s->local_addr);
+            s->local_addr = av_strdup(buf);
+            if (!s->local_addr)
+                return AVERROR(ENOMEM);
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "timeout", p)) {
+            s->rw_timeout = strtol(buf, NULL, 10);
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "listen_timeout", p)) {
+            s->listen_timeout = strtol(buf, NULL, 10);
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "tcp_nodelay", p)) {
+            s->tcp_nodelay = strtol(buf, NULL, 10);
+        }
+    }
+    if (s->rw_timeout >= 0) {
+        s->open_timeout =
+        h->rw_timeout   = s->rw_timeout;
+    }
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    snprintf(portstr, sizeof(portstr), "%d", port);
+    if (s->listen)
+        hints.ai_flags |= AI_PASSIVE;
+    // support dns cache
+    if (s->dns_cache_timeout > 0) {
+        memcpy(hostname_bak, hostname, 1024);
+        if (s->dns_cache_clear) {
+            av_log(NULL, AV_LOG_INFO, "will delete cache entry, hostname = %s\n", hostname);
+            remove_dns_cache_entry(hostname);
+        } else {
+            dns_entry = get_dns_cache_reference(hostname);
+        }
+    }
+    if (dns_entry) {
+        av_log(NULL, AV_LOG_INFO, "Hit DNS cache, hostname = %s\n", hostname);
+        cur_ai = dns_entry->res;
+    } else {
+        if (!hostname[0])
+            ret = getaddrinfo(NULL, portstr, &hints, &ai);
+        else
+            ret = getaddrinfo(hostname, portstr, &hints, &ai);
+        if (ret) {
+            av_log(h, AV_LOG_ERROR,
+                   "Failed to resolve hostname %s: %s\n",
+                   hostname, gai_strerror(ret));
+            return AVERROR(EIO);
+        }
+
+        cur_ai = ai;
+    }
+
+#if HAVE_STRUCT_SOCKADDR_IN6
+    // workaround for IOS9 getaddrinfo in IPv6 only network use hardcode IPv4 address can not resolve port number.
+    if (cur_ai->ai_family == AF_INET6){
+        struct sockaddr_in6 * sockaddr_v6 = (struct sockaddr_in6 *)cur_ai->ai_addr;
+        if (!sockaddr_v6->sin6_port){
+            sockaddr_v6->sin6_port = htons(port);
+        }
+    }
+#endif
+
+    if (s->listen > 0) {
+        while (cur_ai && fd < 0) {
+            fd = ff_socket(cur_ai->ai_family,
+                           cur_ai->ai_socktype,
+                           cur_ai->ai_protocol, h);
+            if (fd < 0) {
+                ret = ff_neterrno();
+                cur_ai = cur_ai->ai_next;
+            }
+        }
+        if (fd < 0)
+            goto fail1;
+        customize_fd(s, fd, cur_ai->ai_family);
+    }
+
+    if (s->listen == 2) {
+        // multi-client
+        if ((ret = ff_listen(fd, cur_ai->ai_addr, cur_ai->ai_addrlen, h)) < 0)
+            goto fail1;
+    } else if (s->listen == 1) {
+        // single client
+        if ((ret = ff_listen_bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen,
+                                  s->listen_timeout, h)) < 0)
+            goto fail1;
+        // Socket descriptor already closed here. Safe to overwrite to client one.
+        fd = ret;
+    } else {
+        ret = av_application_on_tcp_will_open(s->app_ctx);
+        if (ret) {
+            av_log(NULL, AV_LOG_WARNING, "terminated by application in WILL_TCP_OPEN");
+            goto fail1;
+        }
+        // different
+        ret = ff_sendto(fd, http_request, strlen(http_request), FAST_OPEN_FLAG,
+            cur_ai->ai_addr, cur_ai->ai_addrlen, s->open_timeout / 1000, h, !!cur_ai->ai_next);
+        if (av_application_on_tcp_did_open(s->app_ctx, ret, fd, &control)) {
+            av_log(NULL, AV_LOG_WARNING, "terminated by application in DID_TCP_OPEN");
+            goto fail1;
+        }
+        if (ret < 0)
+            goto fail1;
+        s->fastopen_success = 1; // different
+        if (s->dns_cache_timeout > 0 && !dns_entry && strcmp(control.ip, hostname_bak)) {
+            add_dns_cache_entry(hostname_bak, cur_ai, s->dns_cache_timeout);
+            av_log(NULL, AV_LOG_INFO, "Add dns cache hostname = %s, ip = %s\n", hostname_bak, control.ip);
         }
     }
 
@@ -360,6 +550,25 @@ static int tcp_write(URLContext *h, const uint8_t *buf, int size)
         if (ret)
             return ret;
     }
+
+    if (s->fastopen && !s->tcp_connected && av_stristart(buf, "GET", NULL)) {
+        ret = tcp_fast_open(h, s->uri, 0, buf);
+        if (!ret) {
+            s->tcp_connected = 1;
+            if (!s->fastopen_success) {
+                ret = send(s->fd, buf, size, MSG_NOSIGNAL);
+                if (ret > 0) {
+                    s->fastopen_success = 1;
+                }
+                return ret < 0 ? ff_neterrno() : ret;
+            }
+            return ret;
+        } else {
+            av_log(NULL, AV_LOG_WARNING, "tcp_fast_open is error ret = %d\n", ret);
+            return ret;
+        }
+    }
+
     ret = send(s->fd, buf, size, MSG_NOSIGNAL);
     return ret < 0 ? ff_neterrno() : ret;
 }

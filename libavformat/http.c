@@ -242,6 +242,7 @@ static int http_open_cnx_internal(URLContext *h, AVDictionary **options)
             if (err < 0)
                 goto end;
         }
+        av_dict_set_int(options, "fastopen", 0, 0);
     }
     if (port < 0)
         port = 80;
