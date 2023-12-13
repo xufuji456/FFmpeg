@@ -24,6 +24,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
 #include "libavutil/application.h"
+#include "libavutil/dns_cache.h"
 
 #include "internal.h"
 #include "network.h"
@@ -50,6 +51,8 @@ typedef struct TCPContext {
 #endif /* !HAVE_WINSOCK2_H */
     int64_t app_ctx_intptr;
     AVApplicationContext *app_ctx;
+    int64_t dns_cache_timeout;
+    int dns_cache_clear;
 } TCPContext;
 
 #define OFFSET(x) offsetof(TCPContext, x)
@@ -68,6 +71,8 @@ static const AVOption options[] = {
     { "tcp_mss",     "Maximum segment size for outgoing TCP packets",          OFFSET(tcp_mss),     AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
 #endif /* !HAVE_WINSOCK2_H */
     { "ijkapplication",   "AVApplicationContext",                              OFFSET(app_ctx_intptr),   AV_OPT_TYPE_INT64, { .i64 = 0 }, INT64_MIN, INT64_MAX, .flags = D },
+    { "dns_cache_timeout", "dns cache TTL (in microseconds)",                  OFFSET(dns_cache_timeout), AV_OPT_TYPE_INT, { .i64 = -1 },       -1, INT64_MAX, .flags = D|E },
+    { "dns_cache_clear",   "clear dns cache",                                  OFFSET(dns_cache_clear), AV_OPT_TYPE_INT, { .i64 = 0},       -1, INT_MAX, .flags = D|E },
     { NULL }
 };
 
@@ -151,6 +156,9 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     int ret;
     char hostname[1024],proto[1024],path[1024];
     char portstr[10];
+    char hostname_bak[1024] = {0};
+    AVAppTcpIOControl control = {0};
+    DnsCacheEntry *dns_entry = NULL;
     s->open_timeout = 5000000;
     s->app_ctx = (AVApplicationContext *)(intptr_t)s->app_ctx_intptr;
 
@@ -202,18 +210,33 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     snprintf(portstr, sizeof(portstr), "%d", port);
     if (s->listen)
         hints.ai_flags |= AI_PASSIVE;
-    if (!hostname[0])
-        ret = getaddrinfo(NULL, portstr, &hints, &ai);
-    else
-        ret = getaddrinfo(hostname, portstr, &hints, &ai);
-    if (ret) {
-        av_log(h, AV_LOG_ERROR,
-               "Failed to resolve hostname %s: %s\n",
-               hostname, gai_strerror(ret));
-        return AVERROR(EIO);
+    // support dns cache
+    if (s->dns_cache_timeout > 0) {
+        memcpy(hostname_bak, hostname, 1024);
+        if (s->dns_cache_clear) {
+            av_log(NULL, AV_LOG_INFO, "will delete cache entry, hostname = %s\n", hostname);
+            remove_dns_cache_entry(hostname);
+        } else {
+            dns_entry = get_dns_cache_reference(hostname);
+        }
     }
+    if (dns_entry) {
+        av_log(NULL, AV_LOG_INFO, "Hit DNS cache, hostname = %s\n", hostname);
+        cur_ai = dns_entry->res;
+    } else {
+        if (!hostname[0])
+            ret = getaddrinfo(NULL, portstr, &hints, &ai);
+        else
+            ret = getaddrinfo(hostname, portstr, &hints, &ai);
+        if (ret) {
+            av_log(h, AV_LOG_ERROR,
+                   "Failed to resolve hostname %s: %s\n",
+                   hostname, gai_strerror(ret));
+            return AVERROR(EIO);
+        }
 
-    cur_ai = ai;
+        cur_ai = ai;
+    }
 
 #if HAVE_STRUCT_SOCKADDR_IN6
     // workaround for IOS9 getaddrinfo in IPv6 only network use hardcode IPv4 address can not resolve port number.
@@ -260,20 +283,34 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         ret = ff_connect_parallel(ai, s->open_timeout / 1000, 3, h, &fd, customize_fd, s);
         if (ret < 0)
             goto fail1;
-        if (av_application_on_tcp_did_open(s->app_ctx, ret, fd))
+        if (av_application_on_tcp_did_open(s->app_ctx, ret, fd, &control))
             goto fail1;
+        if (s->dns_cache_timeout > 0 && !dns_entry && strcmp(control.ip, hostname_bak)) {
+            add_dns_cache_entry(hostname_bak, cur_ai, s->dns_cache_timeout);
+            av_log(NULL, AV_LOG_INFO, "Add dns cache hostname = %s, ip = %s\n", hostname_bak , control.ip);
+        }
     }
 
     h->is_streamed = 1;
     s->fd = fd;
 
-    freeaddrinfo(ai);
+    if (dns_entry) {
+        release_dns_cache_reference(hostname_bak, &dns_entry);
+    } else {
+        freeaddrinfo(ai);
+    }
     return 0;
 
  fail1:
     if (fd >= 0)
         closesocket(fd);
-    freeaddrinfo(ai);
+    if (dns_entry) {
+        av_log(NULL, AV_LOG_ERROR, "Hit dns cache but connect fail: hostname = %s, ip = %s\n", hostname , control.ip);
+        release_dns_cache_reference(hostname_bak, &dns_entry);
+        remove_dns_cache_entry(hostname_bak);
+    } else {
+        freeaddrinfo(ai);
+    }
     return ret;
 }
 

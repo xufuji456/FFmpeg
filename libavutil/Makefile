@@ -29,6 +29,7 @@ HEADERS = adler32.h                                                     \
           display.h                                                     \
           dovi_meta.h                                                   \
           downmix_info.h                                                \
+          dns_cache.h                                                   \
           encryption_info.h                                             \
           error.h                                                       \
           eval.h                                                        \
@@ -127,6 +128,7 @@ OBJS = adler32.o                                                        \
        display.o                                                        \
        dovi_meta.o                                                      \
        downmix_info.o                                                   \
+       dns_cache.o                                                      \
        encryption_info.o                                                \
        error.o                                                          \
        eval.o                                                           \
