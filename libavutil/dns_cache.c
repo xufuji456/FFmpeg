@@ -19,8 +19,12 @@
  */
 
 #include "libavutil/dns_cache.h"
+#include "libavutil/mem.h"
 #include "libavutil/time.h"
 #include "libavformat/network.h"
+
+#include <stdlib.h>
+#include <string.h>
 
 #if HAVE_PTHREADS
 #include <pthread.h>

@@ -2324,7 +2324,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
                     if (pls->pkt->pts != AV_NOPTS_VALUE)
                         pkt_ts =  pls->pkt->pts;
-                    else if (pls->pkt.dts != AV_NOPTS_VALUE)
+                    else if (pls->pkt->dts != AV_NOPTS_VALUE)
                         pkt_ts =  pls->pkt->dts;
                     else
                         pkt_ts = AV_NOPTS_VALUE;

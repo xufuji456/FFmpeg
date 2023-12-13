@@ -23,6 +23,9 @@
 
 #include "libavutil/log.h"
 
+#include <stdint.h>
+#include <stdlib.h>
+
 #define AVAPP_EVENT_WILL_HTTP_OPEN  1 //AVAppHttpEvent
 #define AVAPP_EVENT_DID_HTTP_OPEN   2 //AVAppHttpEvent
 #define AVAPP_EVENT_WILL_HTTP_SEEK  3 //AVAppHttpEvent

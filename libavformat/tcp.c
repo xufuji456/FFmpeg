@@ -24,6 +24,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
 #include "libavutil/application.h"
+#include "libavutil/avstring.h"
 #include "libavutil/dns_cache.h"
 
 #include "internal.h"
@@ -235,7 +236,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     }
     if (dns_entry) {
         av_log(NULL, AV_LOG_INFO, "Hit DNS cache, hostname = %s\n", hostname);
-        cur_ai = dns_entry->res;
+        cur_ai = dns_entry->addr_info;
     } else {
         if (!hostname[0])
             ret = getaddrinfo(NULL, portstr, &hints, &ai);
@@ -407,7 +408,7 @@ static int tcp_fast_open(URLContext *h, const char *uri, int flags, const char *
     }
     if (dns_entry) {
         av_log(NULL, AV_LOG_INFO, "Hit DNS cache, hostname = %s\n", hostname);
-        cur_ai = dns_entry->res;
+        cur_ai = dns_entry->addr_info;
     } else {
         if (!hostname[0])
             ret = getaddrinfo(NULL, portstr, &hints, &ai);
