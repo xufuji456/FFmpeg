@@ -229,6 +229,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     AVFormatContext *s = *ps;
     FFFormatContext *si;
     AVDictionary *tmp = NULL;
+    AVDictionary *tmp2 = NULL;
     ID3v2ExtraMeta *id3v2_extra_meta = NULL;
     int ret = 0;
 
@@ -318,6 +319,12 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
                 goto close;
             goto fail;
         }
+    if (s->iformat->read_header2) {
+        if (options)
+            av_dict_copy(&tmp2, *options, 0);
+        if ((ret = s->iformat->read_header2(s, &tmp2)) < 0)
+            goto fail;
+    }
 
     if (!s->metadata) {
         s->metadata    = si->id3v2_meta;
@@ -354,6 +361,8 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     if (options) {
         av_dict_free(options);
         *options = tmp;
+        if (tmp2)
+            av_dict_free(&tmp2);
     }
     *ps = s;
     return 0;
@@ -364,6 +373,8 @@ close:
 fail:
     ff_id3v2_free_extra_meta(&id3v2_extra_meta);
     av_dict_free(&tmp);
+    if (tmp2)
+        av_dict_free(&tmp2);
     if (s->pb && !(s->flags & AVFMT_FLAG_CUSTOM_IO))
         avio_closep(&s->pb);
     avformat_free_context(s);
