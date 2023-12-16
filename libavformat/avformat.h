@@ -1003,6 +1003,8 @@ typedef struct AVStream {
  */
 #define AVSTREAM_EVENT_FLAG_NEW_PACKETS (1 << 1)
 
+#define AV_PKT_FLAG_NEW_SEG 0x8000 ///< The packet is the first packet from a source in concat
+
     /**
      * Real base framerate of the stream.
      * This is the lowest framerate with which all timestamps can be

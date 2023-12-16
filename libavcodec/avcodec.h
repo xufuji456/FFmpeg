@@ -2238,8 +2238,6 @@ enum AVSubtitleType {
 
 #define AV_SUBTITLE_FLAG_FORCED 0x00000001
 
-#define AV_PKT_FLAG_NEW_SEG 0x8000 ///< The packet is the first packet from a source in concat
-
 typedef struct AVSubtitleRect {
     int x;         ///< top left corner  of pict, undefined when pict is not set
     int y;         ///< top left corner  of pict, undefined when pict is not set
