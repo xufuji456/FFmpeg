@@ -766,7 +766,7 @@ static int concat_read_packet(AVFormatContext *avf, AVPacket *pkt)
             return ret;
         }
         if (new_st) {
-            pkt->flags |= AV_PKT_NEW_SEG;
+            pkt->flags |= AV_PKT_FLAG_NEW_SEG;
             new_st = 0;
         }
         if ((ret = match_streams(avf)) < 0) {
