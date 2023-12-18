@@ -294,7 +294,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             av_log(NULL, AV_LOG_WARNING, "terminated by application in WILL_TCP_OPEN");
             goto fail1;
         }
-        ret = ff_connect_parallel(ai, s->open_timeout / 1000, 3, h, &fd, customize_fd, s);
+        ret = ff_connect_parallel(cur_ai, s->open_timeout / 1000, 3, h, &fd, customize_fd, s);
         if (av_application_on_tcp_did_open(s->app_ctx, ret, fd, &control)) {
             av_log(NULL, AV_LOG_WARNING, "terminated by application in DID_TCP_OPEN");
             goto fail1;
