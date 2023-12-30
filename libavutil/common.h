@@ -351,7 +351,7 @@ static av_always_inline int64_t av_sat_add64_c(int64_t a, int64_t b) {
     return !__builtin_add_overflow(a, b, &tmp) ? tmp : (tmp < 0 ? INT64_MAX : INT64_MIN);
 #else
     int64_t s = a+(uint64_t)b;
-    if ((int64_t)(a^b | ~s^b) >= 0)
+    if ((int64_t)((a^b) | (~s^b)) >= 0)
         return INT64_MAX ^ (b >> 63);
     return s;
 #endif
