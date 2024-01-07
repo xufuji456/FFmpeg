@@ -1,0 +1,36 @@
+From fe3f4c504923e40230bda0056c5b87b5b4a304e0 Mon Sep 17 00:00:00 2001
+From: xufuji456 <839789740@qq.com>
+Date: Sat, 30 Dec 2023 16:39:37 +0800
+Subject: [PATCH] fftool/ffplay: avoid same name in local variable
+
+There is a warning in XCode:"Declaration shadows a local variable"
+
+Signed-off-by: xufuji456 <839789740@qq.com>
+---
+ fftools/ffplay.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/fftools/ffplay.c b/fftools/ffplay.c
+index ea5ff31393..17861e60be 100644
+--- a/fftools/ffplay.c
++++ b/fftools/ffplay.c
+@@ -1930,11 +1930,11 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
+         if (sd)
+             displaymatrix = (int32_t *)sd->data;
+         if (!displaymatrix) {
+-            const AVPacketSideData *sd = av_packet_side_data_get(is->video_st->codecpar->coded_side_data,
+-                                                                 is->video_st->codecpar->nb_coded_side_data,
+-                                                                 AV_PKT_DATA_DISPLAYMATRIX);
+-            if (sd)
+-                displaymatrix = (int32_t *)sd->data;
++            const AVPacketSideData *psd = av_packet_side_data_get(is->video_st->codecpar->coded_side_data,
++                                                                  is->video_st->codecpar->nb_coded_side_data,
++                                                                  AV_PKT_DATA_DISPLAYMATRIX);
++            if (psd)
++                displaymatrix = (int32_t *)psd->data;
+         }
+         theta = get_rotation(displaymatrix);
+ 
+-- 
+2.39.3 (Apple Git-145)
+
